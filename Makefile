@@ -1,6 +1,6 @@
 export DEBUG=0
 export FINALPACKAGE=1
-export THEOS=/opt/theos
+export THEOS=/theos
 
 //make clean && make package SCHEME=rootless
 
