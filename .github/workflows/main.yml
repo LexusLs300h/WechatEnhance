@@ -20,9 +20,9 @@ jobs:
         run: |
           export THEOS=~/theos
           git clone --recursive https://github.com/theos/theos.git $THEOS
-          # 安装 iOS 14.5 SDK（可根据需求替换版本）
-          curl -LO https://github.com/theos/sdks/raw/master/iPhoneOS14.5.sdk.tar.xz
-          tar -xzvf iPhoneOS14.5.sdk.tar.xz -C $THEOS/sdks
+          # 安装 iOS 15.0 SDK（可根据需求替换版本）
+          curl -LO https://github.com/theos/sdks/raw/master/iPhoneOS15.0.sdk.tar.xz
+          tar -xzvf iPhoneOS15.0.sdk.tar.xz -C $THEOS/sdks
 
       # 3. 安装编译依赖（如 ldid 用于签名）
       - name: Install Dependencies
