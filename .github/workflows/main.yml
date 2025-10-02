@@ -1,0 +1,47 @@
+name: Build iOS DEB Package
+
+on:
+  push:
+    branches: [ main ]  # 监听 main 分支的推送事件
+  pull_request:
+    branches: [ main ]  # 监听 main 分支的 PR 事件
+
+jobs:
+  build:
+    runs-on: ubuntu-latest  # 使用 Ubuntu 最新镜像
+
+    steps:
+      # 1. 检出代码到工作目录
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      # 2. 安装 Theos 开发环境（iOS 越狱开发工具链）
+      - name: Install Theos
+        run: |
+          export THEOS=~/theos
+          git clone --recursive https://github.com/theos/theos.git $THEOS
+          # 安装 iOS 14.5 SDK（可根据需求替换版本）
+          curl -LO https://github.com/theos/sdks/raw/master/iPhoneOS14.5.sdk.tar.xz
+          tar -xzvf iPhoneOS14.5.sdk.tar.xz -C $THEOS/sdks
+
+      # 3. 安装编译依赖（如 ldid 用于签名）
+      - name: Install Dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ldid dpkg-dev fakeroot
+
+      # 4. 编译并打包 DEB
+      - name: Build DEB
+        run: |
+          export THEOS=~/theos
+          # 进入项目目录（根据实际结构调整路径）
+          cd ./your_tweak_project
+          # 执行 Theos 编译命令（ARCH=arm64 适配 64 位设备）
+          make package THEOS_DEVICE_IP=localhost THEOS_DEVICE_PORT=22 ARCH=arm64
+
+      # 5. 上传 DEB 包作为构建产物
+      - name: Upload DEB Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ios-deb-package
+          path: ./your_tweak_project/packages/*.deb  # DEB 包输出路径
