@@ -8,7 +8,7 @@ on:
 
 jobs:
   build:
-    runs-on: ubuntu-latest  # 使用 Ubuntu 最新镜像
+    runs-on: macos-latest 
 
     steps:
       # 1. 检出代码到工作目录
@@ -19,11 +19,12 @@ jobs:
       
 
       # 3. 安装编译依赖（如 ldid 用于签名）
-      - name: Install Dependencies
+      - name: Install dependencies
         run: |
-          sudo apt-get update
-          sudo apt-get install -y ldid dpkg-dev fakeroot
-
+          brew update
+          brew install make git ldid xz
+          sudo xcode-select -s /Applications/Xcode.app/Contents/Developer
+      - name: Verify existing Theos directory
       # 4. 编译并打包 DEB
       - name: Build DEB
         run: |
