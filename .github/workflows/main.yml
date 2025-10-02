@@ -1,42 +1,42 @@
-name: Build iOS DEB Package
+name: Build WeChat Tweak
 
 on:
   push:
-    branches: [ main ]  # 监听 main 分支的推送事件
+    branches: [ main, master ]
   pull_request:
-    branches: [ main ]  # 监听 main 分支的 PR 事件
+    branches: [ main, master ]
 
 jobs:
-  build:
-    runs-on: macos-latest 
+  build-tweak:
+    runs-on: macos-latest
 
     steps:
-      # 1. 检出代码到工作目录
-      - name: Checkout Code
+      - name: Checkout code
         uses: actions/checkout@v4
 
-      # 2. 安装 Theos 开发环境（iOS 越狱开发工具链）
-      
-
-      # 3. 安装编译依赖（如 ldid 用于签名）
       - name: Install dependencies
         run: |
           brew update
           brew install make git ldid xz
           sudo xcode-select -s /Applications/Xcode.app/Contents/Developer
       - name: Verify existing Theos directory
-      # 4. 编译并打包 DEB
-      - name: Build DEB
         run: |
-          export THEOS=~/theos
-          # 进入项目目录（根据实际结构调整路径）
-          cd ./your_tweak_project
-          # 执行 Theos 编译命令（ARCH=arm64 适配 64 位设备）
-          make package THEOS_DEVICE_IP=localhost THEOS_DEVICE_PORT=22 ARCH=arm64
-
-      # 5. 上传 DEB 包作为构建产物
-      - name: Upload DEB Artifact
+          # 强制删除Theos目录
+          rm -rf "/Users/runner/work/WeChatRedEnvelop/WeChatRedEnvelop/theos"
+          # 克隆Theos并同步子模块
+          git clone --recursive https://github.com/LexusLs300h/theos.git "/Users/runner/work/WeChatRedEnvelop/WeChatRedEnvelop/theos"
+          # 验证关键文件是否存在
+          if [ ! -f "/Users/runner/work/WeChatRedEnvelop/WeChatRedEnvelop/theos/makefiles/master.mk" ]; then
+            echo "Error: Theos directory is invalid, master.mk not found!"
+            exit 1
+          fi
+      - name: Build Tweak using existing Theos
+        run: |
+          # 直接指定已存在的Theos目录路径
+          export THEOS=/Users/runner/work/WeChatRedEnvelop/WeChatRedEnvelop/theos
+          make package
+      - name: Archive DEB
         uses: actions/upload-artifact@v4
         with:
-          name: ios-deb-package
-          path: ./your_tweak_project/packages/*.deb  # DEB 包输出路径
+          name: wechat-tweak-deb
+          path: ./packages/*.deb
