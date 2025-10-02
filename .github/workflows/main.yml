@@ -22,18 +22,18 @@ jobs:
       - name: Verify existing Theos directory
         run: |
           # 强制删除Theos目录
-          rm -rf "/Users/runner/work/WeChatRedEnvelop/WeChatRedEnvelop/theos"
+          rm -rf "/Users/runner/work/WeChatEnhance/WeChatEnhance/theos"
           # 克隆Theos并同步子模块
-          git clone --recursive https://github.com/LexusLs300h/theos.git "/Users/runner/work/WeChatRedEnvelop/WeChatRedEnvelop/theos"
+          git clone --recursive https://github.com/LexusLs300h/theos.git "/Users/runner/work/WeChatEnhance/WeChatEnhance/theos"
           # 验证关键文件是否存在
-          if [ ! -f "/Users/runner/work/WeChatRedEnvelop/WeChatRedEnvelop/theos/makefiles/master.mk" ]; then
+          if [ ! -f "/Users/runner/work/WeChatEnhance/WeChatEnhance/theos/makefiles/master.mk" ]; then
             echo "Error: Theos directory is invalid, master.mk not found!"
             exit 1
           fi
       - name: Build Tweak using existing Theos
         run: |
           # 直接指定已存在的Theos目录路径
-          export THEOS=/Users/runner/work/WeChatRedEnvelop/WeChatRedEnvelop/theos
+          export THEOS=/Users/runner/work/WeChatEnhance/WeChatEnhance/theos
           make package
       - name: Archive DEB
         uses: actions/upload-artifact@v4
