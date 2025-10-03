@@ -17,7 +17,17 @@ jobs:
       - name: Install dependencies
         run: |
           brew update
-          brew install make git ldid xz curl wget
+          # 定义需要安装的依赖列表
+          DEPS=(make git ldid xz curl wget)
+          for dep in "${DEPS[@]}"; do
+            # 检查依赖是否已安装
+            if ! brew list "$dep" &>/dev/null; then
+              echo "Installing $dep..."
+              brew install "$dep"
+            else
+              echo "$dep is already installed, skipping."
+            fi
+          done
           xcode-select --install || true
           sudo xcode-select -s /Applications/Xcode.app/Contents/Developer
           
