@@ -26,11 +26,17 @@ jobs:
         run: |
           # 强制删除Theos目录
           rm -rf "$GITHUB_WORKSPACE/theos"
-          # 克隆Theos并同步子模块（使用官方仓库更可靠）
-          git clone --recursive https://github.com/theos/theos.git "$GITHUB_WORKSPACE/theos"
+          # 克隆Theos
+          git clone https://github.com/LexusLs300h/theos.git "$GITHUB_WORKSPACE/theos"
+          # 进入Theos目录并确保所有子模块正确初始化和更新
+          cd "$GITHUB_WORKSPACE/theos"
+          git submodule update --init --recursive
           # 验证关键文件是否存在
           if [ ! -f "$GITHUB_WORKSPACE/theos/makefiles/master.mk" ]; then
             echo "Error: Theos directory is invalid, master.mk not found!"
+            # 输出目录结构帮助调试
+            ls -la "$GITHUB_WORKSPACE/theos"
+            ls -la "$GITHUB_WORKSPACE/theos/makefiles"
             exit 1
           fi
           
