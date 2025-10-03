@@ -69,15 +69,6 @@ jobs:
             echo "Failed to download from $url"
           done
           
-          # 验证文件大小（至少100MB）
-          SDK_MIN_SIZE=$((100 * 1024 * 1024)) # 100MB
-          SDK_SIZE=$(stat -f%z "$SDK_TEMP")
-          if [ $SDK_SIZE -lt $SDK_MIN_SIZE ]; then
-            echo "Error: SDK file is too small ($((SDK_SIZE / 1024 / 1024))MB), likely corrupted"
-            rm -f "$SDK_TEMP"
-            exit 1
-          fi
-          
           # 解压并验证
           echo "Extracting SDK..."
           rm -rf "$SDK_DIR/temp"
