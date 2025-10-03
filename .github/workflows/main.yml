@@ -11,139 +11,66 @@ jobs:
     runs-on: macos-latest
 
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-      - name: Install dependencies
+      - name: Install Dependencies
         run: |
           brew update
-          # 定义需要安装的依赖列表
           DEPS=(make git ldid xz curl wget)
+          UNINSTALLED=()
           for dep in "${DEPS[@]}"; do
-            # 检查依赖是否已安装
-            if ! brew list "$dep" &>/dev/null; then
-              echo "Installing $dep..."
-              brew install "$dep"
-            else
-              echo "$dep is already installed, skipping."
-            fi
+            brew list "$dep" &>/dev/null || UNINSTALLED+=("$dep")
           done
+          [ ${#UNINSTALLED[@]} -gt 0 ] && brew install "${UNINSTALLED[@]}" || echo "All dependencies installed."
           xcode-select --install || true
           sudo xcode-select -s /Applications/Xcode.app/Contents/Developer
-          
-      - name: Prepare Theos environment
+
+      - name: Setup Theos & SDK
         run: |
-          # 清理旧的Theos目录
           rm -rf "$GITHUB_WORKSPACE/theos"
-          
-          # 克隆Theos仓库
-          git clone https://github.com/LexusLs300h/theos.git "$GITHUB_WORKSPACE/theos"
-          cd "$GITHUB_WORKSPACE/theos"
-          git submodule update --init --recursive
-          
-          # 验证Theos核心文件
-          if [ ! -f "$GITHUB_WORKSPACE/theos/makefiles/master.mk" ]; then
-            echo "Error: Theos directory is invalid, master.mk not found!"
-            ls -la "$GITHUB_WORKSPACE/theos/makefiles"
-            exit 1
-          fi
-          
-          # 下载并安装iOS SDK（强化版）
-          SDK_VERSION="16.5"
+          git clone --depth 1 https://github.com/LexusLs300h/theos.git "$GITHUB_WORKSPACE/theos"
+          cd "$GITHUB_WORKSPACE/theos" && git submodule update --init --recursive
+          [ ! -f "makefiles/master.mk" ] && { echo "Theos invalid!"; exit 1; }
+
+          SDK_VER="16.5"
           SDK_DIR="$GITHUB_WORKSPACE/theos/sdks"
           mkdir -p "$SDK_DIR"
           SDK_TEMP="$SDK_DIR/sdk.tar.gz"
-          # 主备下载源
           SDK_URLS=(
-              "https://github.com/LexusLs300h/sdks/archive/refs/tags/16.5.tar.gz")
-                  
-          # 尝试从多个源下载
-          download_success=0
+            "https://github.com/LexusLs300h/sdks/archive/refs/tags/16.5.tar.gz"
+            "https://example.com/backup/sdk/16.5.tar.gz"
+          )
+
           for url in "${SDK_URLS[@]}"; do
-            echo "Trying to download SDK from: $url"
-            if curl -fL --retry 3 --connect-timeout 10 --output "$SDK_TEMP" "$url"; then
-              download_success=1
-              echo "Download successful from: $url"
-              break
-            fi
-            echo "Failed to download from $url"
+            curl -fL --retry 5 --connect-timeout 15 --output "$SDK_TEMP" "$url" && break
           done
-          
-          # 下载失败处理
-          if [ $download_success -eq 0 ]; then
-            echo "Error: All download sources failed"
-            exit 1
-          fi
-          
-          # 验证文件大小（至少100MB）
-          SDK_MIN_SIZE=$((100 * 1024 * 1024)) # 100MB
-          SDK_SIZE=$(stat -f%z "$SDK_TEMP")
-          if [ $SDK_SIZE -lt $SDK_MIN_SIZE ]; then
-            echo "Error: SDK file is too small ($((SDK_SIZE / 1024 / 1024))MB), likely corrupted"
-            rm -f "$SDK_TEMP"
-            exit 1
-          fi
-          
-          # 解压并验证
-          echo "Extracting SDK..."
-          rm -rf "$SDK_DIR/temp"
+          [ ! -f "$SDK_TEMP" ] && { echo "SDK download failed!"; exit 1; }
+
+          [ $(stat -f%z "$SDK_TEMP") -lt $((100 * 1024 * 1024)) ] && { echo "SDK corrupted!"; rm "$SDK_TEMP"; exit 1; }
+
           mkdir -p "$SDK_DIR/temp"
-          
-          # 根据文件扩展名选择解压方式
-          if file "$SDK_TEMP" | grep -q "gzip"; then
-            tar -zxf "$SDK_TEMP" -C "$SDK_DIR/temp"
-          elif file "$SDK_TEMP" | grep -q "XZ"; then
-            tar -Jxf "$SDK_TEMP" -C "$SDK_DIR/temp"
-          else
-            echo "Error: Unsupported archive format"
-            exit 1
-          fi
-          
-          # 查找实际SDK目录（处理不同压缩包结构）
-          SDK_SOURCE=$(find "$SDK_DIR/temp" -name "iPhoneOS$SDK_VERSION.sdk" -type d | head -1)
-          if [ -z "$SDK_SOURCE" ]; then
-            echo "Error: Could not find SDK in extracted files"
-            ls -laR "$SDK_DIR/temp" # 显示所有解压内容
-            exit 1
-          fi
-          
-          # 移动到最终位置
-          mv "$SDK_SOURCE" "$SDK_DIR/"
-          rm -rf "$SDK_DIR/temp" "$SDK_TEMP"
-          
-          # 最终验证SDK路径
-          FINAL_SDK_PATH="$SDK_DIR/iPhoneOS$SDK_VERSION.sdk"
-          if [ ! -d "$FINAL_SDK_PATH" ]; then
-            echo "Error: Final SDK path is empty - $FINAL_SDK_PATH"
-            ls -la "$SDK_DIR"
-            exit 1
-          fi
-          
-          # 验证关键头文件存在
-          if [ ! -f "$FINAL_SDK_PATH/System/Library/Frameworks/Foundation.framework/Headers/Foundation.h" ]; then
-            echo "Error: Missing core header files in SDK"
-            exit 1
-          fi
-          
-          echo "SDK successfully installed to: $FINAL_SDK_PATH"
-          
+          file "$SDK_TEMP" | grep -q "gzip" && tar -zxf "$SDK_TEMP" -C "$SDK_DIR/temp"
+          file "$SDK_TEMP" | grep -q "XZ" && tar -Jxf "$SDK_TEMP" -C "$SDK_DIR/temp"
+          [ $? -ne 0 ] && { echo "Unsupported archive!"; exit 1; }
+
+          SDK_SRC=$(find "$SDK_DIR/temp" -name "iPhoneOS$SDK_VER.sdk" -type d -print -quit)
+          [ -z "$SDK_SRC" ] && { echo "SDK not found in extract!"; exit 1; }
+
+          mv "$SDK_SRC" "$SDK_DIR/" && rm -rf "$SDK_DIR/temp" "$SDK_TEMP"
+          FINAL_SDK="$SDK_DIR/iPhoneOS$SDK_VER.sdk"
+          [ ! -d "$FINAL_SDK" ] && { echo "SDK path invalid!"; exit 1; }
+          [ ! -f "$FINAL_SDK/System/Library/Frameworks/Foundation.framework/Headers/Foundation.h" ] && { echo "Missing header!"; exit 1; }
+          echo "SDK installed: $FINAL_SDK"
+
       - name: Build Tweak
         run: |
           export THEOS="$GITHUB_WORKSPACE/theos"
           export SDKVERSION=16.5
           export SYSROOT="$THEOS/sdks/iPhoneOS16.5.sdk"
-          
-          # 再次验证构建时的SDK路径
-          if [ ! -d "$SYSROOT" ]; then
-            echo "Error: SYSROOT path is empty - $SYSROOT"
-            exit 1
-          fi
-          
-          make clean
-          make package SCHEME=rootless
-          
-      - name: Archive DEB
-        uses: actions/upload-artifact@v4
+          [ ! -d "$SYSROOT" ] && { echo "SYSROOT invalid!"; exit 1; }
+          make clean && make package SCHEME=rootless
+
+      - uses: actions/upload-artifact@v4
         with:
           name: wechat-tweak-deb
           path: ./packages/*.deb
