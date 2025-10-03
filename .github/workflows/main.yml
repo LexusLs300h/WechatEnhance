@@ -56,6 +56,33 @@ jobs:
           # 主备下载源
           SDK_URLS=(
               "https://github.com/LexusLs300h/sdks/archive/refs/tags/16.5.tar.gz")
+                  
+          # 尝试从多个源下载
+          download_success=0
+          for url in "${SDK_URLS[@]}"; do
+            echo "Trying to download SDK from: $url"
+            if curl -fL --retry 3 --connect-timeout 10 --output "$SDK_TEMP" "$url"; then
+              download_success=1
+              echo "Download successful from: $url"
+              break
+            fi
+            echo "Failed to download from $url"
+          done
+          
+          # 下载失败处理
+          if [ $download_success -eq 0 ]; then
+            echo "Error: All download sources failed"
+            exit 1
+          fi
+          
+          # 验证文件大小（至少100MB）
+          SDK_MIN_SIZE=$((100 * 1024 * 1024)) # 100MB
+          SDK_SIZE=$(stat -f%z "$SDK_TEMP")
+          if [ $SDK_SIZE -lt $SDK_MIN_SIZE ]; then
+            echo "Error: SDK file is too small ($((SDK_SIZE / 1024 / 1024))MB), likely corrupted"
+            rm -f "$SDK_TEMP"
+            exit 1
+          fi
           
           # 解压并验证
           echo "Extracting SDK..."
