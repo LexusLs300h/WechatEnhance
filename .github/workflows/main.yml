@@ -17,8 +17,7 @@ jobs:
       - name: Install dependencies
         run: |
           brew update
-          brew install make git ldid xz
-          # 确保Xcode命令行工具正确安装
+          brew install make git ldid xz curl
           xcode-select --install || true
           sudo xcode-select -s /Applications/Xcode.app/Contents/Developer
           
@@ -39,22 +38,51 @@ jobs:
             exit 1
           fi
           
-          # 下载并安装iOS SDK（关键步骤）
+          # 下载并安装iOS SDK（带校验和重试机制）
           SDK_VERSION="16.5"
           SDK_DIR="$GITHUB_WORKSPACE/theos/sdks"
           mkdir -p "$SDK_DIR"
+          SDK_URL="https://github.com/theos/sdks/archive/refs/tags/$SDK_VERSION.tar.gz"
+          SDK_TEMP="$SDK_DIR/sdk.tar.gz"
           
-          # 从Theos官方SDK仓库下载
-          curl -L "https://github.com/theos/sdks/archive/refs/tags/$SDK_VERSION.tar.gz" -o "$SDK_DIR/sdk.tar.gz"
+          # 带重试的下载（最多3次）
+          for i in {1..3}; do
+            echo "Downloading iOS SDK (attempt $i)..."
+            curl -fL --retry 3 --output "$SDK_TEMP" "$SDK_URL" && break
+            if [ $i -eq 3 ]; then
+              echo "Error: Failed to download SDK after 3 attempts"
+              exit 1
+            fi
+            sleep 2
+          done
           
-          # 解压SDK
-          tar -zxf "$SDK_DIR/sdk.tar.gz" -C "$SDK_DIR"
+          # 验证文件格式（检查是否为gzip格式）
+          if ! file "$SDK_TEMP" | grep -q "gzip compressed data"; then
+            echo "Error: Downloaded file is not a valid gzip archive"
+            file "$SDK_TEMP"  # 显示文件实际类型
+            rm -f "$SDK_TEMP"
+            exit 1
+          fi
+          
+          # 解压并处理错误
+          echo "Extracting SDK..."
+          if ! tar -zxf "$SDK_TEMP" -C "$SDK_DIR"; then
+            echo "Error: Failed to extract SDK archive"
+            # 尝试备用解压命令（忽略错误块）
+            echo "Trying alternative extraction method..."
+            if ! gunzip -c "$SDK_TEMP" | tar -xf - -C "$SDK_DIR"; then
+              echo "Error: Alternative extraction also failed"
+              exit 1
+            fi
+          fi
+          
+          # 移动SDK到正确位置
           mv "$SDK_DIR/sdks-$SDK_VERSION/iPhoneOS$SDK_VERSION.sdk" "$SDK_DIR/"
-          rm -rf "$SDK_DIR/sdks-$SDK_VERSION" "$SDK_DIR/sdk.tar.gz"
+          rm -rf "$SDK_DIR/sdks-$SDK_VERSION" "$SDK_TEMP"
           
-          # 验证SDK是否安装成功
+          # 最终验证
           if [ ! -d "$SDK_DIR/iPhoneOS$SDK_VERSION.sdk" ]; then
-            echo "Error: iOS SDK $SDK_VERSION not found!"
+            echo "Error: iOS SDK $SDK_VERSION not found after extraction!"
             ls -la "$SDK_DIR"
             exit 1
           fi
@@ -67,11 +95,9 @@ jobs:
           export SDKVERSION=16.5
           export SYSROOT="$THEOS/sdks/iPhoneOS16.5.sdk"
           
-          # 打印环境变量用于调试
           echo "THEOS path: $THEOS"
           echo "SDK path: $SYSROOT"
           
-          # 执行构建
           make clean
           make package SCHEME=rootless
           
