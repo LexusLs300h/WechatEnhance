@@ -22,29 +22,57 @@ jobs:
           xcode-select --install || true
           sudo xcode-select -s /Applications/Xcode.app/Contents/Developer
           
-      - name: Verify existing Theos directory
+      - name: Prepare Theos environment
         run: |
-          # 强制删除Theos目录
+          # 清理旧的Theos目录
           rm -rf "$GITHUB_WORKSPACE/theos"
-          # 克隆Theos
+          
+          # 克隆Theos仓库
           git clone https://github.com/LexusLs300h/theos.git "$GITHUB_WORKSPACE/theos"
-          # 进入Theos目录并确保所有子模块正确初始化和更新
           cd "$GITHUB_WORKSPACE/theos"
           git submodule update --init --recursive
-          # 验证关键文件是否存在
+          
+          # 验证Theos核心文件
           if [ ! -f "$GITHUB_WORKSPACE/theos/makefiles/master.mk" ]; then
             echo "Error: Theos directory is invalid, master.mk not found!"
-            # 输出目录结构帮助调试
-            ls -la "$GITHUB_WORKSPACE/theos"
             ls -la "$GITHUB_WORKSPACE/theos/makefiles"
             exit 1
           fi
           
-      - name: Build Tweak using existing Theos
+          # 下载并安装iOS SDK（关键步骤）
+          SDK_VERSION="16.5"
+          SDK_DIR="$GITHUB_WORKSPACE/theos/sdks"
+          mkdir -p "$SDK_DIR"
+          
+          # 从Theos官方SDK仓库下载
+          curl -L "https://github.com/theos/sdks/archive/refs/tags/$SDK_VERSION.tar.gz" -o "$SDK_DIR/sdk.tar.gz"
+          
+          # 解压SDK
+          tar -zxf "$SDK_DIR/sdk.tar.gz" -C "$SDK_DIR"
+          mv "$SDK_DIR/sdks-$SDK_VERSION/iPhoneOS$SDK_VERSION.sdk" "$SDK_DIR/"
+          rm -rf "$SDK_DIR/sdks-$SDK_VERSION" "$SDK_DIR/sdk.tar.gz"
+          
+          # 验证SDK是否安装成功
+          if [ ! -d "$SDK_DIR/iPhoneOS$SDK_VERSION.sdk" ]; then
+            echo "Error: iOS SDK $SDK_VERSION not found!"
+            ls -la "$SDK_DIR"
+            exit 1
+          fi
+          
+          echo "Theos and iOS SDK $SDK_VERSION prepared successfully"
+          
+      - name: Build Tweak
         run: |
-          # 使用环境变量更可靠
           export THEOS="$GITHUB_WORKSPACE/theos"
-          # 明确指定编译方案
+          export SDKVERSION=16.5
+          export SYSROOT="$THEOS/sdks/iPhoneOS16.5.sdk"
+          
+          # 打印环境变量用于调试
+          echo "THEOS path: $THEOS"
+          echo "SDK path: $SYSROOT"
+          
+          # 执行构建
+          make clean
           make package SCHEME=rootless
           
       - name: Archive DEB
