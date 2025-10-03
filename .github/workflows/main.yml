@@ -18,23 +18,29 @@ jobs:
         run: |
           brew update
           brew install make git ldid xz
+          # 确保Xcode命令行工具正确安装
+          xcode-select --install || true
           sudo xcode-select -s /Applications/Xcode.app/Contents/Developer
+          
       - name: Verify existing Theos directory
         run: |
           # 强制删除Theos目录
-          rm -rf "/Users/runner/work/WeChatEnhance/WeChatEnhance/theos"
-          # 克隆Theos并同步子模块
-          git clone --recursive https://github.com/LexusLs300h/theos.git "/Users/runner/work/WeChatEnhance/WeChatEnhance/theos"
+          rm -rf "$GITHUB_WORKSPACE/theos"
+          # 克隆Theos并同步子模块（使用官方仓库更可靠）
+          git clone --recursive https://github.com/theos/theos.git "$GITHUB_WORKSPACE/theos"
           # 验证关键文件是否存在
-          if [ ! -f "/Users/runner/work/WeChatEnhance/WeChatEnhance/theos/makefiles/master.mk" ]; then
+          if [ ! -f "$GITHUB_WORKSPACE/theos/makefiles/master.mk" ]; then
             echo "Error: Theos directory is invalid, master.mk not found!"
             exit 1
           fi
+          
       - name: Build Tweak using existing Theos
         run: |
-          # 直接指定已存在的Theos目录路径
-          export THEOS=/Users/runner/work/WeChatEnhance/WeChatEnhance/theos
-          make package
+          # 使用环境变量更可靠
+          export THEOS="$GITHUB_WORKSPACE/theos"
+          # 明确指定编译方案
+          make package SCHEME=rootless
+          
       - name: Archive DEB
         uses: actions/upload-artifact@v4
         with:
