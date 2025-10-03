@@ -16,8 +16,10 @@ jobs:
       - name: Dependencies
         run: |
           brew update
-          # 添加unzip以支持zip格式解压
-          for d in make git ldid xz curl wget unzip; do brew list $d || BREW_INSTALL+=( $d ); done
+          # 确保所有必要工具都已安装，包括压缩工具
+          for d in make git ldid xz curl wget unzip gzip tar; do 
+            brew list $d &>/dev/null || BREW_INSTALL+=( $d )
+          done
           [ ${#BREW_INSTALL[@]} -gt 0 ] && brew install ${BREW_INSTALL[@]}
           xcode-select --install || true
           sudo xcode-select -s /Applications/Xcode.app/Contents/Developer
@@ -33,28 +35,51 @@ jobs:
           mkdir -p sdks
           SDK_TEMP="sdks/sdk.tar.gz"
           
-          # 下载SDK
+          # 下载SDK并验证完整性
           for u in https://github.com/LexusLs300h/sdks/archive/refs/tags/${SDK}.tar.gz; do
-            curl -fL --retry 3 --connect-timeout 15 -o "$SDK_TEMP" "$u" && break
+            echo "Downloading SDK from $u"
+            if curl -fL --retry 5 --connect-timeout 15 --max-time 300 -o "$SDK_TEMP" "$u"; then
+              # 验证文件哈希（如果知道正确哈希值，可添加在此处）
+              echo "Download completed. File size: $(du -h "$SDK_TEMP")"
+              break
+            fi
           done
           [ ! -s "$SDK_TEMP" ] && { echo "SDK download failed"; exit 1; }
           
           # 验证文件大小(至少100MB)
-          [ $(stat -f%z "$SDK_TEMP") -lt 104857600 ] && { echo "SDK file corrupted"; rm "$SDK_TEMP"; exit 1; }
+          if [ $(stat -f%z "$SDK_TEMP") -lt 104857600 ]; then
+            echo "SDK file too small (expected ≥100MB)"
+            rm "$SDK_TEMP"
+            exit 1
+          fi
 
           # 创建临时解压目录
           mkdir -p sdks/temp
+          rm -rf sdks/temp/*  # 确保目录为空
           
-          # 增强版格式检测与解压
+          # 增强版gzip解压逻辑，添加详细错误输出
           ARCHIVE_TYPE=$(file -b "$SDK_TEMP" | awk '{print $1}')
           echo "Detected archive type: $ARCHIVE_TYPE"
           
           case "$ARCHIVE_TYPE" in
             gzip)
-              tar -zxf "$SDK_TEMP" -C sdks/temp || { echo "Gzip extraction failed"; exit 1; }
+              echo "Attempting to extract gzip archive..."
+              # 添加详细输出和错误检查
+              if ! tar -zxvf "$SDK_TEMP" -C sdks/temp; then
+                echo "Gzip extraction failed. Checking file integrity..."
+                # 尝试直接解压gzip文件
+                if ! gunzip -c "$SDK_TEMP" | tar -xvf - -C sdks/temp; then
+                  echo "Direct gzip decompression also failed"
+                  echo "File info:"
+                  file "$SDK_TEMP"
+                  echo "File header:"
+                  head -n 10 "$SDK_TEMP"
+                  exit 1
+                fi
+              fi
               ;;
             XZ)
-              tar -Jxf "$SDK_TEMP" -C sdks/temp || { echo "XZ extraction failed"; exit 1; }
+              tar -Jxvf "$SDK_TEMP" -C sdks/temp || { echo "XZ extraction failed"; exit 1; }
               ;;
             Zip)
               unzip -q "$SDK_TEMP" -d sdks/temp || { echo "Zip extraction failed"; exit 1; }
@@ -65,18 +90,29 @@ jobs:
               ;;
           esac
 
-          # 查找SDK目录
+          # 查看解压内容
+          echo "Extracted contents:"
+          ls -la sdks/temp
+          
+          # 查找SDK目录（处理可能的子目录层级）
           SDK_DIR=$(find sdks/temp -name "iPhoneOS${SDK}.sdk" -type d -print -quit)
-          [ -z "$SDK_DIR" ] && { echo "SDK not found after extraction"; exit 1; }
+          if [ -z "$SDK_DIR" ]; then
+            echo "SDK not found after extraction. Searching all extracted files:"
+            find sdks/temp
+            exit 1
+          fi
           
           # 移动SDK到最终位置并清理
           mv "$SDK_DIR" sdks/ && rm -rf sdks/temp "$SDK_TEMP"
           
           # 验证核心头文件
-          [ ! -f "sdks/iPhoneOS${SDK}.sdk/System/Library/Frameworks/Foundation.framework/Headers/Foundation.h" ] && {
-            echo "Missing core SDK headers";
-            exit 1;
-          }
+          FOUNDATION_HEADER="sdks/iPhoneOS${SDK}.sdk/System/Library/Frameworks/Foundation.framework/Headers/Foundation.h"
+          if [ ! -f "$FOUNDATION_HEADER" ]; then
+            echo "Missing core header file: $FOUNDATION_HEADER"
+            echo "SDK directory contents:"
+            ls -la sdks
+            exit 1
+          fi
 
       - name: Build
         run: |
