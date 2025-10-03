@@ -45,10 +45,8 @@ jobs:
           SDK_TEMP="$SDK_DIR/sdk.tar.gz"
           # 主备下载源
           SDK_URLS=(
-            "https://github.com/theos/sdks/archive/refs/tags/$SDK_VERSION.tar.gz"
-            "https://github.com/searchfe/theos-sdks/releases/download/$SDK_VERSION/iPhoneOS$SDK_VERSION.sdk.tar.xz"
-          )
-          
+              "https://github.com/LexusLs300h/sdks/archive/refs/tags/16.5.tar.gz")
+                  
           # 尝试从多个源下载
           download_success=0
           for url in "${SDK_URLS[@]}"; do
